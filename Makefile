@@ -1,6 +1,9 @@
-all : main
+all : release
 
-main : main.c coroutine.c
+release: main.c coroutine.c
+	gcc -g -Wall -O3 -o $@ $^
+
+debug: main.c coroutine.c
 	gcc -g -Wall -o $@ $^
 
 clean :
