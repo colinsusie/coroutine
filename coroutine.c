@@ -4,11 +4,17 @@
 #include <assert.h>
 #include <stddef.h>
 #include <string.h>
-#include <stdint.h> 
+#include <stdint.h>
 #if __APPLE__ && __MACH__
 	#include <sys/ucontext.h>
 #else 
 	#include <ucontext.h>
+#endif
+
+// 如果是x64，替代为自己的实现
+#if defined(__x86_64__)
+#define USE_COCTX
+#include "coctx.h"
 #endif
 
 #define MIN_STACK_SIZE (128*1024)
@@ -35,7 +41,11 @@ typedef struct coroutine {
 	co_func func;			// 协程回调函数
 	void *ud;				// 用户数据
 	int pco;				// 前一个协程，即resume这个协程的那个协程
+#ifdef USE_COCTX
+	coctx_t ctx;			// 协程的执行环境
+#else
 	ucontext_t ctx;			// 协程的执行环境
+#endif
 	schedule_t * sch;		// 调度器
 	int status;				// 当前状态：CO_STATUS_RUNNING...
 	char *stack;			// 栈内存
@@ -87,8 +97,13 @@ static void cofunc(uint32_t low32, uint32_t hi32) {
 	coroutine_t *pco = S->co[co->pco];
 	pco->status = CO_STATUS_RUNNING;
 	S->running = co->pco;
+#ifdef USE_COCTX
+	coctx_t dummy;
+	coswapctx(&dummy, &pco->ctx);
+#else
 	ucontext_t dummy;
 	swapcontext(&dummy, &pco->ctx);
+#endif
 }
 
 int co_new(schedule_t *S, co_func func, void *ud) {
@@ -134,12 +149,19 @@ int co_new(schedule_t *S, co_func func, void *ud) {
 		if (func) {
 			coroutine_t *curco = S->co[S->running];
 			assert(curco);
+#ifdef USE_COCTX
+			co->ctx.ss_sp = co->stack;
+			co->ctx.ss_size = S->stsize;
+			uintptr_t ptr = (uintptr_t)S;
+			comakectx(&co->ctx, cofunc, (uint32_t)ptr, (uint32_t)(ptr>>32));
+#else
 			getcontext(&co->ctx);
 			co->ctx.uc_stack.ss_sp = co->stack;
 			co->ctx.uc_stack.ss_size = S->stsize;
 			co->ctx.uc_link = &curco->ctx;
 			uintptr_t ptr = (uintptr_t)S;
 			makecontext(&co->ctx, (void (*)(void))cofunc, 2, (uint32_t)ptr, (uint32_t)(ptr>>32));
+#endif
 		}
 	}
 
@@ -159,7 +181,11 @@ int co_resume(schedule_t * S, int id) {
 		co->pco = S->running;
 		co->status = CO_STATUS_RUNNING;
 		S->running = id;
+#ifdef USE_COCTX
+		coswapctx(&curco->ctx, &co->ctx);
+#else
 		swapcontext(&curco->ctx, &co->ctx);
+#endif
 		return 0;
 	default:
 		return -1;
@@ -178,7 +204,11 @@ int co_yield(schedule_t * S) {
 	co->status = CO_STATUS_SUSPEND;
 	pco->status = CO_STATUS_RUNNING;
 	S->running = co->pco;
+#ifdef USE_COCTX
+	coswapctx(&co->ctx ,&pco->ctx);
+#else
 	swapcontext(&co->ctx ,&pco->ctx);
+#endif
 	return 0;
 }
 

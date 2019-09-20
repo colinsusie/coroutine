@@ -115,7 +115,7 @@ static void test5(schedule_t *S) {
 	struct timeval begin;
 	struct timeval end;
 	int i;
-	int count = 10000;
+	int count = 1000;
 
 	gettimeofday(&begin, NULL);
 	for (i = 0; i < count; ++i) {
@@ -125,7 +125,7 @@ static void test5(schedule_t *S) {
 	printf("create time=%f\n", timediff(&begin, &end));
 	
 	gettimeofday(&begin, NULL);
-	for (i =0; i < 1000000; ++i) {
+	for (i =0; i < 5000000; ++i) {
 		int co = (i % count) + 1;
 		co_resume(S, co);
 	}
