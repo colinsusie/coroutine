@@ -11,4 +11,4 @@ typedef struct {
 typedef void (*cofun)(uint32_t p1, uint32_t p2);
 
 extern int comakectx(coctx_t *ctx, cofun fn, uint32_t p1, uint32_t p2);
-extern int coswapctx(coctx_t *octx, coctx_t *ctx);
+extern int coswapctx(coctx_t *octx, coctx_t *ctx) asm("coswapctx");
